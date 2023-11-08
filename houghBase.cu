@@ -13,6 +13,7 @@
 #include <math.h>
 #include <cuda.h>
 #include <string.h>
+#include <cuda_runtime.h>
 #include "pgm.h"
 
 const int degreeInc = 2;
@@ -72,8 +73,8 @@ void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
 // The accummulator memory needs to be allocated by the host in global memory
 __global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float rMax, float rScale, float *d_Cos, float *d_Sin)
 {
-  //TODO calcular: int gloID = ?
-  int gloID = w * h + 1; //TODO
+  //DONE calcular: int gloID = 
+  int gloID = blockIdx.x * blockDim.x + threadIdx.x;
   if (gloID > w * h) return;      // in case of extra threads in block
 
   int xCent = w / 2;
@@ -121,8 +122,22 @@ int main (int argc, char **argv)
   cudaMalloc ((void **) &d_Cos, sizeof (float) * degreeBins);
   cudaMalloc ((void **) &d_Sin, sizeof (float) * degreeBins);
 
+  // DONE: Incorporar medicion de tiempo usando CUDA events
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+  
+  cudaEventRecord(start); //registrar tiempo de inicio
+
   // CPU calculation
   CPU_HoughTran(inImg.pixels, w, h, &cpuht);
+
+  cudaEventRecord(stop); //registrar tiempo de fin
+  cudaEventSynchronize(stop);
+
+  // calcular el tiempo transcurrido
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
 
   // pre-compute values to be stored
   float *pcCos = (float *) malloc (sizeof (float) * degreeBins);
@@ -171,7 +186,18 @@ int main (int argc, char **argv)
   }
   printf("Done!\n");
 
-  // TODO clean-up
+  // Mostrar el tiempo transcurrido
+  printf("Tiempo transcurrido: %.4f ms\n", milliseconds);
+
+  // DONE: Clean-up
+  cudaFree(d_in);
+  cudaFree(d_hough);
+  cudaFree(d_Cos);
+  cudaFree(d_Sin);
+  free(pcCos);
+  free(pcSin);
+  free(cpuht);
+  free(h_hough);
 
   return 0;
 }
