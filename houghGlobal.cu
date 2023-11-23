@@ -1,13 +1,3 @@
-/*
- ============================================================================
- Author        : G. Barlas
- Version       : 1.0
- Last modified : December 2014
- License       : Released under the GNU GPL 3.0
- Description   :
- To build use  : make
- ============================================================================
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -20,11 +10,6 @@ const int degreeInc = 2;
 const int degreeBins = 180 / degreeInc;
 const int rBins = 100;
 const float radInc = degreeInc * M_PI / 180;
-
-// Declaración de memoria constante
-__constant__ float d_Cos[degreeBins];
-__constant__ float d_Sin[degreeBins];
-
 //*****************************************************************
 // The CPU function returns a pointer to the accummulator
 void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
@@ -76,7 +61,7 @@ void CPU_HoughTran (unsigned char *pic, int w, int h, int **acc)
 
 // GPU kernel. One thread per image pixel is spawned.
 // The accummulator memory needs to be allocated by the host in global memory
-__global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float rMax, float rScale)
+__global__ void GPU_HoughTran (unsigned char *pic, int w, int h, int *acc, float rMax, float rScale, float *d_Cos, float *d_Sin)
 {
   //DONE calcular: int gloID = 
   int gloID = blockIdx.x * blockDim.x + threadIdx.x;
@@ -131,7 +116,7 @@ int main (int argc, char **argv)
   cudaEvent_t start, stop;
   cudaEventCreate(&start);
   cudaEventCreate(&stop);
-  
+
   // CPU calculation
   CPU_HoughTran(inImg.pixels, w, h, &cpuht);
 
@@ -149,9 +134,9 @@ int main (int argc, char **argv)
   float rMax = sqrt (1.0 * w * w + 1.0 * h * h) / 2;
   float rScale = 2 * rMax / rBins;
 
-  // DONE Copia de las constantes a la memoria constante
-  cudaMemcpyToSymbol(d_Cos, pcCos, sizeof(float) * degreeBins);
-  cudaMemcpyToSymbol(d_Sin, pcSin, sizeof(float) * degreeBins);
+  // TODO eventualmente volver memoria global
+  cudaMemcpy(d_Cos, pcCos, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
+  cudaMemcpy(d_Sin, pcSin, sizeof (float) * degreeBins, cudaMemcpyHostToDevice);
 
   // setup and copy data from host to device
   unsigned char *d_in, *h_in;
@@ -171,7 +156,7 @@ int main (int argc, char **argv)
   // execution configuration uses a 1-D grid of 1-D blocks, each made of 256 threads
   //1 thread por pixel
   int blockNum = ceil (w * h / 256);
-  GPU_HoughTran <<< blockNum, 256 >>> (d_in, w, h, d_hough, rMax, rScale);
+  GPU_HoughTran <<< blockNum, 256 >>> (d_in, w, h, d_hough, rMax, rScale, d_Cos, d_Sin);
 
   cudaEventRecord(stop); //registrar tiempo de fin
   cudaEventSynchronize(stop);
